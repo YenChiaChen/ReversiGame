@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <title>Reversi Multiplayer Game</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.1.3/socket.io.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style>
+    /* 棋盤樣式 */
+    #board {
+      border-collapse: separate;
+      border-spacing: 4px;
+      background-color: #2e2e2e;
+      padding: 8px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    }
+    #board td {
+      width: 60px;
+      height: 60px;
+      background-color: #4caf50;
+      border-radius: 8px;
+      box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.2);
+      text-align: center;
+      vertical-align: middle;
+      font-size: 24px;
+      color: white;
+      transition: transform 0.2s ease;
+      position: relative;
+    }
+    #board td img{
+        margin: 0 auto;
+    }
+    #board td:hover {
+      transform: scale(1.05);
+      cursor: pointer;
+    }
+    #board td.valid {
+      background-color: #81c784;
+      position: relative;
+    }
+    #board td.valid::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 12px;
+      height: 12px;
+      background-color: #ffffff;
+      border-radius: 50%;
+      opacity: 0.8;
+    }
+    /* 棋子圖片樣式及翻面動畫 */
+    #board td img.piece {
+      width: 50px;
+      height: 50px;
+      object-fit: contain;
+      transition: transform 0.6s;
+      transform-style: preserve-3d;
+    }
+    @keyframes flip {
+      from {
+        transform: rotateY(0deg);
+      }
+      to {
+        transform: rotateY(180deg);
+      }
+    }
+    .flip {
+      animation: flip 0.6s;
+    }
+  </style>
+</head>
+<body class="bg-linear-to-r from-cyan-500 to-blue-500">
+  <h1 class="text-white font-bold text-3xl mx-auto mt-12 mb-8 text-center">增揉擰的黑白棋遊戲</h1>
+  
+  <!-- 大廳區塊 -->
+  <div id="lobby" class="mx-auto mt-12 w-full max-w-md flex flex-col items-center bg-white bg-opacity-40 p-8 rounded-2xl shadow-2xl backdrop-blur-md transition-all">
+    <h1 class="text-2xl font-semibold mb-6 text-gray-800">選擇遊戲模式</h1>
+    <button onclick="createRoom('AI')" class="cursor-pointer w-full px-6 py-3 mb-4 bg-white bg-opacity-30 rounded-xl text-gray-800 font-medium tracking-wide shadow-md hover:bg-white hover:scale-[1.05] hover:shadow-xl active:scale-100 transition-all duration-300">
+      開始遊戲（電腦對戰）
+    </button>
+    <button onclick="createRoom('PVP')" class="cursor-pointer w-full px-6 py-3 mb-6 bg-white bg-opacity-30 rounded-xl text-gray-800 font-medium tracking-wide shadow-md hover:bg-white hover:scale-[1.05] hover:shadow-xl active:scale-100 transition-all duration-300">
+      開始遊戲（PVP）
+    </button>
+    <div class="cursor-pointer w-full flex flex-col space-y-4 mt-4">
+      <input type="text" id="room_id_input" placeholder="輸入房間代碼"
+        class="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white bg-opacity-60 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-opacity-100 transition-all duration-300">
+      <select id="mode_select" class="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white bg-opacity-60 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-opacity-100 transition-all duration-300">
+        <option value="PVP">PVP</option>
+        <option value="AI">AI</option>
+      </select>
+      <button onclick="joinRoom()" class="cursor-pointer w-full px-6 py-3 bg-indigo-500 text-white font-semibold rounded-xl shadow-md hover:bg-indigo-600 hover:scale-[1.03] hover:shadow-lg active:scale-100 transition-all duration-300">
+        加入遊戲
+      </button>
+    </div>
+    <p id="lobby_msg" class="mt-4 text-sm text-red-600 font-medium"></p>
+  </div>
+
+  <!-- 遊戲區塊 -->
+  <div id="game" style="display:none;" class="mx-auto mt-16 max-w-4xl w-full flex flex-col items-center gap-6 bg-white bg-opacity-40 rounded-2xl p-8 shadow-2xl backdrop-blur-md transition-all">
+    <div class="w-full flex justify-center">
+      <div class="bg-red-500 text-white text-2xl font-extrabold px-6 py-3 rounded-xl shadow-lg animate-pulse mb-6">
+        ⏱️ 剩餘時間：<span id="time_left">30</span> 秒
+      </div>
+    </div>
+    <div class="text-center">
+      <h2 class="text-2xl font-bold text-gray-800">房間代碼：<span id="room_id_display" class="text-indigo-600"></span></h2>
+      <p class="text-md text-gray-700">模式：<span id="mode_display" class="font-semibold"></span></p>
+      <p class="text-md text-gray-700">玩家人數：<span id="players_count" class="font-semibold">0</span></p>
+    </div>
+    <div id="game_over" style="display:none;" class="text-center text-red-600 text-xl font-bold"></div>
+    <div class="w-full flex justify-center">
+      <table id="board" class="border-separate border-spacing-1"></table>
+    </div>
+    <div class="text-center">
+      <p class="text-lg font-medium text-gray-800">目前玩家：<span id="current" class="text-indigo-700"></span></p>
+    </div>
+    <div id="game_controls" style="display:none;" class="mt-4 flex gap-4">
+      <button onclick="restartGame()" class="px-6 py-3 bg-green-500 text-white font-semibold rounded-xl shadow-md hover:bg-green-600 hover:scale-105 transition-all">
+        重新開始
+      </button>
+      <button onclick="leaveRoom()" class="px-6 py-3 bg-red-500 text-white font-semibold rounded-xl shadow-md hover:bg-red-600 hover:scale-105 transition-all">
+        離開房間
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const BLACK_IMG = "{{ url_for('static', filename='black.png') }}";
+    const WHITE_IMG = "{{ url_for('static', filename='white.png') }}";
+  </script>
+
+  <script>
+    const socket = io();
+    let currentRoom = null;
+    let timer = null;
+    let timeLeft = 30;
+    let currentMode = null;
+    let lastState = null;
+    let previousBoard = null;
+
+    // 創建房間並加入
+    function createRoom(mode) {
+      fetch('/api/new_room', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: mode })
+      })
+      .then(response => response.json())
+      .then(data => {
+        document.getElementById('room_id_input').value = data.room_id;
+        document.getElementById('mode_select').value = data.mode;
+        joinRoom();
+      })
+      .catch(err => console.error("Create room error:", err));
+    }
+
+    // 加入房間
+    function joinRoom() {
+      const room_id = document.getElementById('room_id_input').value.trim();
+      currentMode = document.getElementById('mode_select').value;
+      if (!room_id) {
+        alert("請輸入房間代碼！");
+        return;
+      }
+      currentRoom = room_id;
+      socket.emit('join_room', { room_id: currentRoom, mode: currentMode });
+      document.getElementById('room_id_display').innerText = currentRoom;
+      document.getElementById('mode_display').innerText = currentMode;
+      document.getElementById('lobby').style.display = 'none';
+      document.getElementById('game').style.display = 'block';
+    }
+
+    // 房間狀態更新
+    socket.on('room_status', function(data) {
+      document.getElementById('players_count').innerText = data.players;
+      if (data.players === 2) {
+        console.log("遊戲開始...");
+      }
+    });
+
+    // 狀態更新：包括棋盤更新與計時器重設
+    socket.on('state_update', function(state) {
+      lastState = state;
+      updateBoard(state);
+      if (state.game_over) {
+        let msg = state.winner === "Draw" ? "Game Over! It's a Draw!" : "Game Over! Winner: " + state.winner;
+        document.getElementById('game_over').innerText = msg;
+        document.getElementById('game_over').style.display = 'block';
+        document.getElementById('game_controls').style.display = 'block';
+        clearInterval(timer);
+      } else {
+        document.getElementById('game_over').style.display = 'none';
+        document.getElementById('game_controls').style.display = 'none';
+      }
+    });
+
+    // 更新棋盤狀態：使用圖片呈現棋子並檢查翻面動畫
+    function updateBoard(state) {
+      const board = state.board;
+      const validMoves = state.valid_moves || [];
+      const table = document.getElementById('board');
+      table.innerHTML = '';
+
+      for (let i = 0; i < board.length; i++) {
+        const row = document.createElement('tr');
+        for (let j = 0; j < board[i].length; j++) {
+          const cell = document.createElement('td');
+          // 若為有效移動則綁定點擊事件
+          if (validMoves.some(m => m.row === i && m.col === j)) {
+            cell.classList.add('valid');
+            cell.onclick = () => makeMove(i, j);
+          }
+          // 若有棋子，則以圖片顯示，並判斷是否需加上翻面動畫
+          if (board[i][j] !== ".") {
+            const img = document.createElement('img');
+            img.classList.add("piece");
+            if (board[i][j] === "B") {
+  img.src = BLACK_IMG;
+  img.alt = "Black Piece";
+} else if (board[i][j] === "W") {
+  img.src = WHITE_IMG;
+  img.alt = "White Piece";
+}
+            if (previousBoard && previousBoard[i][j] !== board[i][j] && previousBoard[i][j] !== "." && board[i][j] !== ".") {
+              img.classList.add("flip");
+              img.addEventListener("animationend", () => {
+                img.classList.remove("flip");
+              });
+            }
+            cell.appendChild(img);
+          }
+          row.appendChild(cell);
+        }
+        table.appendChild(row);
+      }
+
+      document.getElementById('current').innerText = state.current;
+      timeLeft = state.time_left || 30;
+      previousBoard = JSON.parse(JSON.stringify(board));
+      startTimer();
+    }
+
+    // 發送移動指令
+    function makeMove(row, col) {
+      socket.emit('make_move', { room_id: currentRoom, row: row, col: col });
+    }
+
+    // 自動下棋：當計時歸零時，從有效移動中選擇第一個
+    function autoMove() {
+      setTimeout(() => {
+        if (lastState && Array.isArray(lastState.valid_moves) && lastState.valid_moves.length > 0) {
+          const move = lastState.valid_moves[0];
+          socket.emit('make_move', { room_id: currentRoom, row: move.row, col: move.col });
+        } else {
+          console.log("無有效移動，自動下棋失敗。");
+        }
+      }, 1000);
+    }
+
+    // 啟動倒數計時
+    function startTimer() {
+      clearInterval(timer);
+      document.getElementById('time_left').innerText = timeLeft;
+      timer = setInterval(() => {
+        timeLeft--;
+        document.getElementById('time_left').innerText = timeLeft;
+        if (timeLeft <= 0) {
+          clearInterval(timer);
+          autoMove();
+        }
+      }, 1000);
+    }
+
+    // 重新開始遊戲
+    function restartGame() {
+      socket.emit('restart_game', { room_id: currentRoom });
+      document.getElementById('game_over').style.display = 'none';
+      document.getElementById('game_controls').style.display = 'none';
+    }
+
+    // 離開房間
+    function leaveRoom() {
+      location.reload();
+    }
+  </script>
+</body>
+</html>
