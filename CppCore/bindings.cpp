@@ -43,6 +43,50 @@ py::dict get_state(reversi::Game &game) {
     return state;
 }
 
+py::list preview_move(reversi::Game &game, int x, int y) {
+    py::list flips;
+    // 取得目前玩家與棋盤
+    reversi::Board::Cell player = game.currentPlayer();
+    const reversi::Board &board = game.getBoard();
+
+    // 定義一個本地 lambda 來檢查邊界
+    auto in_bounds = [](int a, int b) -> bool {
+        return a >= 0 && a < reversi::Board::SIZE && b >= 0 && b < reversi::Board::SIZE;
+    };
+
+    // 若不是合法走法，直接回傳空列表
+    if (!board.isValidMove(x, y, player)) {
+        return flips;
+    }
+
+    int dx[] = {-1, -1, -1, 0, 0, 1, 1, 1};
+    int dy[] = {-1, 0, 1, -1, 1, -1, 0, 1};
+    reversi::Board::Cell opponent = (player == reversi::Board::Cell::Black)
+                                     ? reversi::Board::Cell::White
+                                     : reversi::Board::Cell::Black;
+
+    // 模擬各個方向
+    for (int dir = 0; dir < 8; ++dir) {
+        int nx = x + dx[dir], ny = y + dy[dir];
+        std::vector<std::pair<int, int>> path;
+        while (in_bounds(nx, ny) && board.getCell(nx, ny) == opponent) {
+            path.push_back({nx, ny});
+            nx += dx[dir];
+            ny += dy[dir];
+        }
+        if (!path.empty() && in_bounds(nx, ny) && board.getCell(nx, ny) == player) {
+            for (auto &pos : path) {
+                py::dict d;
+                d["row"] = pos.first;
+                d["col"] = pos.second;
+                flips.append(d);
+            }
+        }
+    }
+    return flips;
+}
+
+
 
 PYBIND11_MODULE(reversi_core, m) {
     m.doc() = "Reversi Game Core module";
@@ -74,4 +118,5 @@ PYBIND11_MODULE(reversi_core, m) {
 
     // 綁定輔助函式，回傳完整狀態字典
     m.def("get_state", &get_state, "Return game state as a dict");
+    m.def("preview_move", &preview_move, "Return flips preview for a move");
 }

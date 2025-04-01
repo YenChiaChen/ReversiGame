@@ -39,6 +39,11 @@
       background-color: #81c784;
       position: relative;
     }
+
+    .previewed {
+  outline: 2px dashed blue;
+  outline-offset: -4px;
+}
     #board td.valid::after {
       content: '';
       position: absolute;
@@ -132,7 +137,7 @@
     const WHITE_IMG = "{{ url_for('static', filename='white.png') }}";
   </script>
 
-  <script>
+<script>
     const socket = io();
     let currentRoom = null;
     let timer = null;
@@ -140,7 +145,30 @@
     let currentMode = null;
     let lastState = null;
     let previousBoard = null;
-
+    // ★ 新增：儲存預覽結果 (格式：[{row: X, col: Y}, ...])
+    let previewFlips = [];
+  
+    // ★ 新增：僅更新棋盤上預覽效果，不重繪整個棋盤
+    function updatePreviewDisplay() {
+      const table = document.getElementById('board');
+      for (let i = 0; i < table.rows.length; i++) {
+        for (let j = 0; j < table.rows[i].cells.length; j++) {
+          const cell = table.rows[i].cells[j];
+          if (previewFlips.some(f => f.row === i && f.col === j)) {
+            cell.classList.add('previewed');
+          } else {
+            cell.classList.remove('previewed');
+          }
+        }
+      }
+    }
+  
+    // ★ 修改：清除預覽只需清空 previewFlips 並更新預覽樣式
+    function clearPreview() {
+      previewFlips = [];
+      updatePreviewDisplay();
+    }
+  
     // 創建房間並加入
     function createRoom(mode) {
       fetch('/api/new_room', {
@@ -156,7 +184,7 @@
       })
       .catch(err => console.error("Create room error:", err));
     }
-
+  
     // 加入房間
     function joinRoom() {
       const room_id = document.getElementById('room_id_input').value.trim();
@@ -172,7 +200,7 @@
       document.getElementById('lobby').style.display = 'none';
       document.getElementById('game').style.display = 'block';
     }
-
+  
     // 房間狀態更新
     socket.on('room_status', function(data) {
       document.getElementById('players_count').innerText = data.players;
@@ -180,7 +208,7 @@
         console.log("遊戲開始...");
       }
     });
-
+  
     // 狀態更新：包括棋盤更新與計時器重設
     socket.on('state_update', function(state) {
       lastState = state;
@@ -196,34 +224,48 @@
         document.getElementById('game_controls').style.display = 'none';
       }
     });
-
-    // 更新棋盤狀態：使用圖片呈現棋子並檢查翻面動畫
+  
+    // ★ 修改：接收後端預覽結果，僅更新預覽變數，並調用 updatePreviewDisplay()
+    socket.on('preview_result', function(data) {
+      previewFlips = data.flips || [];
+      updatePreviewDisplay();
+    });
+  
+    // 更新棋盤狀態：使用圖片呈現棋子並檢查翻面動畫，同時對有效移動格子加入預覽事件
     function updateBoard(state) {
+      if (!state) return;
       const board = state.board;
       const validMoves = state.valid_moves || [];
       const table = document.getElementById('board');
       table.innerHTML = '';
-
+  
       for (let i = 0; i < board.length; i++) {
         const row = document.createElement('tr');
         for (let j = 0; j < board[i].length; j++) {
           const cell = document.createElement('td');
-          // 若為有效移動則綁定點擊事件
+          // 若為有效移動，綁定點擊與預覽事件
           if (validMoves.some(m => m.row === i && m.col === j)) {
             cell.classList.add('valid');
             cell.onclick = () => makeMove(i, j);
+            // ★ 新增：滑鼠移入時請求預覽
+            cell.onmouseenter = () => {
+              socket.emit('preview_move', { room_id: currentRoom, row: i, col: j });
+            };
+            // ★ 新增：滑鼠移出時清除預覽
+            cell.onmouseleave = () => clearPreview();
+            cell.innerText = "";
           }
-          // 若有棋子，則以圖片顯示，並判斷是否需加上翻面動畫
+          // 若該格已有棋子，則以圖片呈現
           if (board[i][j] !== ".") {
             const img = document.createElement('img');
             img.classList.add("piece");
             if (board[i][j] === "B") {
-  img.src = BLACK_IMG;
-  img.alt = "Black Piece";
-} else if (board[i][j] === "W") {
-  img.src = WHITE_IMG;
-  img.alt = "White Piece";
-}
+              img.src = BLACK_IMG;
+              img.alt = "Black Piece";
+            } else if (board[i][j] === "W") {
+              img.src = WHITE_IMG;
+              img.alt = "White Piece";
+            }
             if (previousBoard && previousBoard[i][j] !== board[i][j] && previousBoard[i][j] !== "." && board[i][j] !== ".") {
               img.classList.add("flip");
               img.addEventListener("animationend", () => {
@@ -236,30 +278,34 @@
         }
         table.appendChild(row);
       }
-
+  
       document.getElementById('current').innerText = state.current;
       timeLeft = state.time_left || 30;
       previousBoard = JSON.parse(JSON.stringify(board));
       startTimer();
     }
-
+  
     // 發送移動指令
     function makeMove(row, col) {
       socket.emit('make_move', { room_id: currentRoom, row: row, col: col });
+      // 每次下棋後清除預覽
+      previewFlips = [];
     }
-
-    // 自動下棋：當計時歸零時，從有效移動中選擇第一個
-    function autoMove() {
-      setTimeout(() => {
-        if (lastState && Array.isArray(lastState.valid_moves) && lastState.valid_moves.length > 0) {
-          const move = lastState.valid_moves[0];
-          socket.emit('make_move', { room_id: currentRoom, row: move.row, col: move.col });
-        } else {
-          console.log("無有效移動，自動下棋失敗。");
-        }
-      }, 1000);
+  
+// 自動下棋：當計時歸零時，從有效移動中選擇第一個
+function autoMove() {
+  // 延遲 2000 毫秒再執行電腦下棋
+  setTimeout(() => {
+    if (lastState && Array.isArray(lastState.valid_moves) && lastState.valid_moves.length > 0) {
+      const move = lastState.valid_moves[0];
+      socket.emit('make_move', { room_id: currentRoom, row: move.row, col: move.col });
+    } else {
+      console.log("無有效移動，自動下棋失敗。");
     }
+  }, 2000);
+}
 
+  
     // 啟動倒數計時
     function startTimer() {
       clearInterval(timer);
@@ -273,18 +319,20 @@
         }
       }, 1000);
     }
-
+  
     // 重新開始遊戲
     function restartGame() {
       socket.emit('restart_game', { room_id: currentRoom });
       document.getElementById('game_over').style.display = 'none';
       document.getElementById('game_controls').style.display = 'none';
     }
-
+  
     // 離開房間
     function leaveRoom() {
       location.reload();
     }
   </script>
+  
+  
 </body>
 </html>
