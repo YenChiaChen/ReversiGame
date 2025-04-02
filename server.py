@@ -122,7 +122,7 @@ def handle_make_move(data):
         # AI 模式：若非遊戲結束且輪到 AI (此處假設玩家永遠是黑棋，AI 為白棋)
         if rooms[room_id]['mode'] == "AI" and not state.get('game_over', False):
             if game.current_player() == reversi_core.Cell.White:
-                eventlet.sleep(1)
+                eventlet.sleep(3)
                 game.auto_move()
                 state = reversi_core.get_state(game)
                 if game.is_game_over():
@@ -158,15 +158,29 @@ def handle_preview_move(data):
     room_id = data.get('room_id')
     row = data.get('row')
     col = data.get('col')
+    
     if room_id not in rooms or not rooms[room_id]['game']:
         emit('error', {'msg': 'Game not started or room not found'}, room=request.sid)
         return
+    
     game = rooms[room_id]['game']
+    
+    # 確認該玩家是否為當前輪到的玩家
+    current_state = reversi_core.get_state(game)
+    current_color = current_state.get("current")
+    player_color = rooms[room_id]['colors'].get(request.sid)
+    
+    # 如果輪到的玩家不是當前玩家，則不允許預覽
+    if player_color != current_color:
+        emit('error', {'msg': 'Not your turn!'}, room=request.sid)
+        return
+
     try:
         flips = reversi_core.preview_move(game, int(row), int(col))
         emit('preview_result', {'row': row, 'col': col, 'flips': flips}, room=request.sid)
     except Exception as e:
         emit('error', {'msg': str(e)}, room=request.sid)
+
 
 
 if __name__ == '__main__':

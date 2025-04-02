@@ -1,0 +1,133 @@
+@import url('https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Pixelify+Sans:wght@400..700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Jersey+20&display=swap');
+
+.bagel-fat-one-regular {
+    font-family: "Bagel Fat One", system-ui;
+    font-weight: 400;
+    font-style: normal;
+  }
+  
+.pixelify-sans {
+    font-family: "Jersey 20";
+    font-optical-sizing: auto;
+    font-style: normal;
+  }
+  
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  .animate-fadeIn {
+    animation: fadeIn 0.5s forwards;
+  }
+  
+
+/* 棋盤樣式 */
+#board {
+    border-collapse: separate;
+    border-spacing: 4px;
+    background-color: #F5DAE9;
+    padding: 8px;
+    border-radius: 12px;
+  }
+  
+  #board td {
+    width: 60px;
+    height: 60px;
+    background-color: #99DEEE;
+    border-radius: 8px;
+    text-align: center;
+    vertical-align: middle;
+    font-size: 24px;
+    color: white;
+    transition: transform 0.2s ease;
+    position: relative;
+  }
+  
+  #board td img {
+    margin: 0 auto;
+  }
+  
+  #board td:hover {
+    transform: scale(1.05);
+    cursor: pointer;
+  }
+  
+  #board td.valid {
+    background-color: #7bc5d6;
+    position: relative;
+  }
+  
+  #board td.valid::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 12px;
+    height: 12px;
+    background-color: #ffffff;
+    border-radius: 50%;
+    opacity: 0.8;
+  }
+  
+  .previewed img {
+    /* 呼吸動畫：放大縮小 */
+    animation: breathing 1.5s ease-in-out infinite, glowing 1.5s ease-in-out infinite;
+  }
+  
+  /* 放大縮小的呼吸動畫 */
+  @keyframes breathing {
+    0% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.05);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  
+  /* 微微發光的效果，使用 drop-shadow 來使發光從圖片本身產生 */
+  @keyframes glowing {
+    0% {
+      filter: drop-shadow(0 0 8px rgba(255, 41, 198, 0.6)); /* 藍色微光 */
+    }
+    50% {
+      filter: drop-shadow(0 0 12px rgba(255, 41, 198, 0.8)); /* 更亮的藍色微光 */
+    }
+    100% {
+      filter: drop-shadow(0 0 8px rgba(255, 41, 198, 0.6)); /* 恢復為原來的藍色微光 */
+    }
+  }
+  
+  
+  
+  /* 棋子圖片樣式及翻面動畫 */
+  #board td img.piece {
+    width: 50px;
+    height: 50px;
+    object-fit: contain;
+    transition: transform 0.6s;
+    transform-style: preserve-3d;
+  }
+  
+  @keyframes flip {
+    from {
+      transform: rotateY(0deg);
+    }
+    to {
+      transform: rotateY(180deg);
+    }
+  }
+  
+  .flip {
+    animation: flip 0.6s;
+  }
+  
