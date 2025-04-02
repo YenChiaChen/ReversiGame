@@ -2,6 +2,21 @@
 
 This repository implements a multiplayer Reversi game with both PVP and AI modes. The game core is written in C++ and exposed to Python via pybind11. The backend is built with Flask and Flask-SocketIO, while the frontend is a web interface served on port 3000.
 
+## Game Preview
+
+- Menu - Choose game mode
+  
+<img width="842" alt="image" src="https://github.com/user-attachments/assets/c52b6660-193d-4926-92e1-b877de148091" />
+
+- Menu - Multiplayer
+  
+<img width="844" alt="image" src="https://github.com/user-attachments/assets/33f45045-9713-4993-bab8-fdae842042e9" />
+
+- Gameplay
+  
+<img width="1368" alt="image" src="https://github.com/user-attachments/assets/77521f5b-daa9-4ef5-a2a7-70188e82bd4c" />
+
+
 ## Project Structure
 
 ```
